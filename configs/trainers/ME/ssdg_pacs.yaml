@@ -1,7 +1,7 @@
 DATALOADER:
   TRAIN_X:
-    SAMPLER: "SeqDomainSampler"
-    BATCH_SIZE: 48 # 16 images per domain
+    SAMPLER: "RandomSampler"
+    BATCH_SIZE: 64
   TRAIN_U:
     SAME_AS_X: True
   TEST:
@@ -20,7 +20,7 @@ TRAIN:
   PRINT_FREQ: 10
 
 TRAINER:
-  FBASA:
+  ME:
     STRONG_TRANSFORMS:
       ["random_flip", "randaugment_fixmatch", "normalize", "cutout"]
     C_OPTIM:

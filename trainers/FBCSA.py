@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from dassl.data.data_manager import DataManager, build_data_loader
+from dassl.data import DataManager
 from dassl.engine import TRAINER_REGISTRY, TrainerXU, SimpleNet
 from dassl.optim import build_optimizer, build_lr_scheduler
 from dassl.data.transforms import build_transform
@@ -47,7 +47,6 @@ class FBCSA(TrainerXU):
             norm_mean = cfg.INPUT.PIXEL_MEAN
             norm_std = cfg.INPUT.PIXEL_STD
 
-        self.alpha = cfg.TRAINER.FBASA.ALPHA
 
     def check_cfg(self, cfg):
         assert len(cfg.TRAINER.FBASA.STRONG_TRANSFORMS) > 0
@@ -61,26 +60,14 @@ class FBCSA(TrainerXU):
         choices = cfg.TRAINER.FBASA.STRONG_TRANSFORMS
         tfm_train_strong = build_transform(cfg, is_train=True, choices=choices)
         custom_tfm_train += [tfm_train_strong]
-        self.dm = DataManager(self.cfg, custom_tfm_train=custom_tfm_train)
-        self.train_loader_x = self.dm.train_loader_x
-        self.train_loader_u = self.dm.train_loader_u
-        self.val_loader = self.dm.val_loader
-        self.test_loader = self.dm.test_loader
-        self.num_classes = self.dm.num_classes
-        self.num_source_domains = self.dm.num_source_domains
-        self.lab2cname = self.dm.lab2cname
-
-        # Prototype loader that iterates through all the data
-        tfm_test = build_transform(cfg, is_train=False)
-        self.proto_loader = build_data_loader(
-            cfg,
-            sampler_type='SequentialSampler',
-            data_source=self.dm.dataset.train_x,
-            batch_size=cfg.DATALOADER.TRAIN_X.BATCH_SIZE,
-            tfm=tfm_test,
-            is_train=False
-        )
-
+        dm = DataManager(self.cfg, custom_tfm_train=custom_tfm_train)
+        self.train_loader_x = dm.train_loader_x
+        self.train_loader_u = dm.train_loader_u
+        self.val_loader = dm.val_loader
+        self.test_loader = dm.test_loader
+        self.num_classes = dm.num_classes
+        self.num_source_domains = dm.num_source_domains
+        self.lab2cname = dm.lab2cname
 
     def build_model(self):
         cfg = self.cfg
@@ -125,6 +112,7 @@ class FBCSA(TrainerXU):
         K = self.num_source_domains
         # NOTE: If num_source_domains=1, we split a batch into two halves
         K = 2 if K == 1 else K
+
         ####################
         # Generate pseudo labels & simillarity based labels
         ####################
@@ -173,10 +161,6 @@ class FBCSA(TrainerXU):
         loss_u_aug = 0
         loss_u_feat_clas = 0
         loss_u_sim = 0
-        mutual_info_loss = 0
-        H_alpha_loss = 0
-        H_alpha_marginal_loss = 0
-
         for k in range(K):
             y_xu_k_pred = y_xu_pred[k]
             mask_xu_k = mask_xu[k]
@@ -223,23 +207,6 @@ class FBCSA(TrainerXU):
             loss_sim = (loss_sim * mask_xu_k).mean()
             loss_u_sim += loss_sim * 0.5
 
-            # # Mutual Information Loss
-            # if self.alpha:
-            #     p_xu_k_aug = F.softmax(z_xu_k_aug, dim=1)
-            #     if self.alpha == 1:
-            #         H_alpha = -(p_xu_k_aug * torch.log(p_xu_k_aug + 1e-9)).sum(dim=1).mean()
-            #         p_xu_k_marginal = p_xu_k_aug.mean(dim=0)
-            #         H_alpha_marginal = -(p_xu_k_marginal * torch.log(p_xu_k_marginal + 1e-9)).sum()
-            #         H_alpha_loss += H_alpha # Entropy of Y given X
-            #         H_alpha_marginal_loss += H_alpha_marginal # Entropy of Y
-            #         mutual_info_loss += H_alpha - H_alpha_marginal
-            #     else:
-            #         H_alpha = (p_xu_k_aug ** self.alpha).sum(dim=1).mean()
-            #         H_alpha_marginal = p_xu_k_aug.mean(dim=0).pow(self.alpha).sum()
-            #         H_alpha_loss += H_alpha # Entropy of Y given X
-            #         H_alpha_marginal_loss += H_alpha_marginal # Entropy of Y
-            #         mutual_info_loss += (H_alpha - H_alpha_marginal) / (self.alpha - 1)
-
         loss_summary = {}
 
         loss_all = 0
@@ -255,18 +222,6 @@ class FBCSA(TrainerXU):
         loss_all += loss_u_sim
         loss_summary["loss_SA"] = loss_u_sim.item()
 
-        # if self.alpha:
-        #     loss_all -= mutual_info_loss  # Subtract mutual information loss
-        #     loss_summary["mutual_info_loss"] = mutual_info_loss.item()
-
-        #     # log H_alpha and H_alpha_marginal
-        #     loss_summary["H_alpha"] = H_alpha_loss.item()
-        #     loss_summary["H_alpha_marginal"] = H_alpha_marginal_loss.item()
-
-        # if loss_all contains NaN
-        if (loss_all != loss_all).data.any():
-            print("NaN detected in loss.")
-        
         self.model_backward_and_update(loss_all)
 
         loss_summary["y_u_pred_acc_thre"] = y_u_pred_stats["acc_thre"]
@@ -280,12 +235,11 @@ class FBCSA(TrainerXU):
         return loss_summary
 
     def before_epoch(self):
-        # train_loader_x_iter = iter(self.train_loader_x)
-        train_loader_x_iter = iter(self.proto_loader)
+        train_loader_x_iter = iter(self.train_loader_x)
         total_x = []
         total_y = []
         total_d = []
-        for self.batch_idx in range(len(self.proto_loader)):
+        for self.batch_idx in range(len(self.train_loader_x)):
             batch_x = next(train_loader_x_iter)
 
             input_x = batch_x["img0"]
@@ -303,6 +257,7 @@ class FBCSA(TrainerXU):
         K = self.num_source_domains
         # NOTE: If num_source_domains=1, we split a batch into two halves
         K = 2 if K == 1 else K
+
         global_feat = []
 
         for i in range(K):

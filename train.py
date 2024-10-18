@@ -17,7 +17,7 @@ import datasets.ssdg_vlcs
 
 # trainers
 import trainers.FBCSA
-import trainers.MI
+import trainers.ME
 
 
 def print_args(args, cfg):
@@ -65,15 +65,13 @@ def reset_cfg(cfg, args):
     if args.head:
         cfg.MODEL.HEAD.NAME = args.head
 
-    if args.alpha:
-        cfg.TRAINER.FBASA.ALPHA = args.alpha
+    if args.me:
+        cfg.TRAINER.ME.ME = args.me
     else:
-        cfg.TRAINER.FBASA.ALPHA = 1
+        cfg.TRAINER.ME.ME = None
 
-    if args.lamb:
-        cfg.TRAINER.FBASA.LAMBDA = args.lamb
-    else:
-        cfg.TRAINER.FBASA.LAMBDA = 0
+    if args.weight_h:
+        cfg.TRAINER.ME.WEIGHT_H = args.weight_h
 
     if args.one_source_l:
         cfg.DATASET.ONE_SOURCE_L = args.one_source_l
@@ -81,19 +79,19 @@ def reset_cfg(cfg, args):
         cfg.DATASET.ONE_SOURCE_L = None
 
     if args.batch_size:
-        cfg.DATALOADER.TRAIN_X.BATCH_SIZE = args.batch_size*len(cfg.DATASET.SOURCE_DOMAINS)
-        cfg.DATALOADER.TRAIN_U.BATCH_SIZE = args.batch_size*len(cfg.DATASET.SOURCE_DOMAINS)
+        cfg.DATALOADER.TRAIN_X.BATCH_SIZE = args.batch_size
+        cfg.DATALOADER.TRAIN_U.BATCH_SIZE = args.batch_size
         print(f"Batch size: {cfg.DATALOADER.TRAIN_X.BATCH_SIZE}")
 
 
 def extend_cfg(cfg, args):
-    cfg.TRAINER.FBASA = CN()
-    cfg.TRAINER.FBASA.CONF_THRE = 0.95  # confidence threshold
-    cfg.TRAINER.FBASA.STRONG_TRANSFORMS = ()  # strong augmentations
-    cfg.TRAINER.FBASA.C_OPTIM = copy.deepcopy(cfg.OPTIM)  # classifier's optim setting
-    cfg.TRAINER.FBASA.CLASSIFIER = "normal"  # stochastic or normal
-    cfg.TRAINER.FBASA.IMBALANCE = args.imbalance  # class imbalance type
-    cfg.TRAINER.FBASA.GAMMA = args.gamma  # class imbalance ratio
+    cfg.TRAINER.ME = CN()
+    cfg.TRAINER.ME.CONF_THRE = 0.95  # confidence threshold
+    cfg.TRAINER.ME.STRONG_TRANSFORMS = ()  # strong augmentations
+    cfg.TRAINER.ME.C_OPTIM = copy.deepcopy(cfg.OPTIM)  # classifier's optim setting
+    cfg.TRAINER.ME.CLASSIFIER = "normal"  # stochastic or normal
+    cfg.TRAINER.ME.IMBALANCE = args.imbalance  # class imbalance type
+    cfg.TRAINER.ME.GAMMA = args.gamma  # class imbalance ratio
 
 
 
@@ -211,16 +209,16 @@ if __name__ == "__main__":
         help="modify config options using the command-line",
     )
     parser.add_argument(
-        "--alpha",
+        "--me",
         default=None,
-        type=float,
-        help="alpha value for alpha-TIM"
+        type=str,
+        help="marginal entropy type (shannon or alpha)"
     )
     parser.add_argument(
-        "--lamb",
+        "--weight-h",
         default=None,
         type=float,
-        help="lambda value for lambda-TIM"
+        help="weight (or alpha) for marginal entropy loss"
     )
     parser.add_argument(
         "--batch-size",
