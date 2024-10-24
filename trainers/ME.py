@@ -46,7 +46,7 @@ class ME(TrainerXU):
     def check_cfg(self, cfg):
         assert len(cfg.TRAINER.ME.STRONG_TRANSFORMS) > 0
         assert cfg.DATALOADER.TRAIN_U.SAME_AS_X
-        assert cfg.TRAINER.ME.BASELINE in ['FixMatch', 'FreeMatch', 'FlexMatch']
+        assert cfg.TRAINER.ME.BASELINE in ['fixmatch', 'freematch', 'flexmatch']
 
     def build_data_loader(self):
         cfg = self.cfg

@@ -72,6 +72,8 @@ def reset_cfg(cfg, args):
 
     if args.weight_h:
         cfg.TRAINER.ME.WEIGHT_H = args.weight_h
+    else:
+        cfg.TRAINER.ME.WEIGHT_H = None
 
     if args.one_source_l:
         cfg.DATASET.ONE_SOURCE_L = args.one_source_l
@@ -239,7 +241,7 @@ if __name__ == "__main__":
         "--baseline",
         default='FixMatch',
         type=str,
-        help="baseline method (FixMatch, FreeMatch or FlexMatch)"
+        help="baseline method (fixmatch, freematch or flexmatch)"
     )
     args = parser.parse_args()
     main(args)
