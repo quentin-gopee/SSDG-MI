@@ -56,14 +56,14 @@ class SSDGPACS(DatasetBase):
         print(cfg.DATASET.ONE_SOURCE_L)
 
         split_ssdg_path = osp.join(
-            self.split_ssdg_dir, f"{tgt_domain}_nlab{num_labeled}_{cfg.TRAINER.FBASA.IMBALANCE}_seed{seed}.json"
+            self.split_ssdg_dir, f"{tgt_domain}_nlab{num_labeled}_{cfg.TRAINER.ME.IMBALANCE}_seed{seed}.json"
         )
         if not osp.exists(split_ssdg_path):
             train_x, train_u = self._read_data_train(
                     cfg.DATASET.SOURCE_DOMAINS,
                     num_labeled,
-                    cfg.TRAINER.FBASA.IMBALANCE,
-                    gamma=cfg.TRAINER.FBASA.GAMMA,
+                    cfg.TRAINER.ME.IMBALANCE,
+                    gamma=cfg.TRAINER.ME.GAMMA,
                     one_source_l=cfg.DATASET.ONE_SOURCE_L
                 )
         else:

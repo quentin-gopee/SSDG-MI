@@ -41,9 +41,12 @@ class ME(TrainerXU):
 
         self.weight_h = cfg.TRAINER.ME.WEIGHT_H
         self.me = cfg.TRAINER.ME.ME
+        self.baseline = cfg.TRAINER.ME.BASELINE
 
     def check_cfg(self, cfg):
         assert len(cfg.TRAINER.ME.STRONG_TRANSFORMS) > 0
+        assert cfg.DATALOADER.TRAIN_U.SAME_AS_X
+        assert cfg.TRAINER.ME.BASELINE in ['FixMatch', 'FreeMatch', 'FlexMatch']
 
     def build_data_loader(self):
         cfg = self.cfg
@@ -96,7 +99,7 @@ class ME(TrainerXU):
 
         # Generate pseudo labels
         with torch.no_grad():
-            output_u = F.softmax(self.model(input_u), 1)
+            output_u = F.softmax(self.C(self.G(input_u), stochastic=False), 1)
             max_prob, label_u_pred = output_u.max(1)
             mask_u = (max_prob >= self.conf_thre).float()
 
@@ -106,11 +109,11 @@ class ME(TrainerXU):
             )
 
         # Supervised loss
-        output_x = self.model(input_x)
+        output_x = self.C(self.G(input_x), stochastic=False)
         loss_x = F.cross_entropy(output_x, label_x)
 
         # Unsupervised loss
-        output_u = self.model(input_u2)
+        output_u = self.C(self.G(input_u2), stochastic=False)
         loss_u = F.cross_entropy(output_u, label_u_pred, reduction="none")
         loss_u = (loss_u * mask_u).mean()
 
@@ -118,22 +121,22 @@ class ME(TrainerXU):
         # Marginal Entropy loss
         ####################
         if self.me:
-            input_u2_marginal = input_u2.mean(0)
+            output_u_marginal = F.softmax(output_u, 1).mean(0)
 
             if self.me == 'shannon':
-                loss_marginal_entropy = self.weight_h * (input_u2_marginal * torch.log(input_u2_marginal + 1e-9)).sum()
+                loss_marginal_entropy = self.weight_h * (output_u_marginal * torch.log(output_u_marginal + 1e-9)).sum()
             elif self.me == 'alpha':
                 if self.weight_h == 1:
-                    loss_marginal_entropy = (input_u2_marginal * torch.log(input_u2_marginal + 1e-9)).sum()
+                    loss_marginal_entropy = (output_u_marginal * torch.log(output_u_marginal + 1e-9)).sum()
                 else:
-                    loss_marginal_entropy = (1/(1-self.weight_h)) * (input_u2_marginal ** self.weight_h).sum()
+                    loss_marginal_entropy = (1/(1-self.weight_h)) * (output_u_marginal ** self.weight_h).sum()
             else:
                 raise ValueError(f"Unknown marginal entropy type: {self.me}")
             
         loss_summary = {}
 
         loss_all = 0
-        loss_all += 1/(1+self.epoch*self.lambda_) * loss_x
+        loss_all += loss_x
         loss_summary["loss_x"] = loss_x.item()
 
         loss_all += loss_u

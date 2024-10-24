@@ -48,15 +48,15 @@ class SSDGVLCS(DatasetBase):
         tgt_domain = cfg.DATASET.TARGET_DOMAINS[0]
 
         split_ssdg_path = osp.join(
-            self.split_ssdg_dir, f"{tgt_domain}_nlab{num_labeled}_{cfg.TRAINER.FBASA.IMBALANCE}_seed{seed}.json"
+            self.split_ssdg_dir, f"{tgt_domain}_nlab{num_labeled}_{cfg.TRAINER.ME.IMBALANCE}_seed{seed}.json"
         )
         if not osp.exists(split_ssdg_path):
             train_x, train_u = self._read_data_train(
                     cfg.DATASET.SOURCE_DOMAINS,
                     "full",
                     num_labeled,
-                    cfg.TRAINER.FBASA.IMBALANCE,
-                    gamma=cfg.TRAINER.FBASA.GAMMA,
+                    cfg.TRAINER.ME.IMBALANCE,
+                    gamma=cfg.TRAINER.ME.GAMMA,
                     one_source_l=cfg.DATASET.ONE_SOURCE_L
                 )
         else:
@@ -101,7 +101,7 @@ class SSDGVLCS(DatasetBase):
         # Labelled samples come from all source domains
         if one_source_l is None:
             # Get number of labels
-            path = osp.join(self.dataset_dir, input_domains[0], split)
+            path = osp.join(self.dataset_dir, input_domains[0].upper(), split)
             folders = listdir_nohidden(path, sort=True)
             labels = np.arange(len(folders))
 
@@ -109,7 +109,7 @@ class SSDGVLCS(DatasetBase):
             min_distribution = [
                 min(
                     [
-                        len(glob.glob(osp.join(self.dataset_dir, domain, split, folder, "*.jpg")))
+                        len(glob.glob(osp.join(self.dataset_dir, domain.upper(), split, folder, "*.jpg")))
                     for domain in input_domains]
                 )
             for folder in folders]
@@ -169,13 +169,13 @@ class SSDGVLCS(DatasetBase):
             assert one_source_l in input_domains, "Labelled source domain not in the input domains"
 
             # Get number of labels
-            path = osp.join(self.dataset_dir, input_domains[0], split)
+            path = osp.join(self.dataset_dir, input_domains[0].upper(), split)
             folders = listdir_nohidden(path, sort=True)
             labels = np.arange(len(folders))
 
             # Get the number of samples in each category/domain
             distribution = [
-                len(glob.glob(osp.join(self.dataset_dir, one_source_l, split, folder, "*.jpg")))
+                len(glob.glob(osp.join(self.dataset_dir, one_source_l.upper(), split, folder, "*.jpg")))
                 for folder in folders
             ]
 
@@ -266,6 +266,7 @@ class SSDGVLCS(DatasetBase):
         items = []
 
         for domain, dname in enumerate(input_domains):
+            dname = dname.upper()
             if split == "all":
                 train_dir = osp.join(self.dataset_dir, dname, "train")
                 impath_label_list = _load_data_from_directory(train_dir)

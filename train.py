@@ -83,6 +83,9 @@ def reset_cfg(cfg, args):
         cfg.DATALOADER.TRAIN_U.BATCH_SIZE = args.batch_size
         print(f"Batch size: {cfg.DATALOADER.TRAIN_X.BATCH_SIZE}")
 
+    if args.baseline:
+        cfg.TRAINER.ME.BASELINE = args.baseline
+
 
 def extend_cfg(cfg, args):
     cfg.TRAINER.ME = CN()
@@ -231,6 +234,12 @@ if __name__ == "__main__":
         default=None,
         type=str,
         help="name of the labelled source domain if only one source domain is used"
+    )
+    parser.add_argument(
+        "--baseline",
+        default='FixMatch',
+        type=str,
+        help="baseline method (FixMatch, FreeMatch or FlexMatch)"
     )
     args = parser.parse_args()
     main(args)
