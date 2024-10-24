@@ -239,7 +239,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--baseline",
-        default='FixMatch',
+        default='fixmatch',
         type=str,
         help="baseline method (fixmatch, freematch or flexmatch)"
     )
