@@ -16,7 +16,7 @@ from dassl.optim import build_optimizer, build_lr_scheduler
 from dassl.data.transforms import build_transform
 from dassl.utils import count_num_param
 
-from .adain.adain import AdaIN
+from pl_mask import FixMatchMask, FlexMatchMask
 
 
 class NormalClassifier(nn.Module):
@@ -38,10 +38,18 @@ class ME(TrainerXU):
         super().__init__(cfg)
 
         self.conf_thre = cfg.TRAINER.ME.CONF_THRE
-
         self.weight_h = cfg.TRAINER.ME.WEIGHT_H
         self.me = cfg.TRAINER.ME.ME
         self.baseline = cfg.TRAINER.ME.BASELINE
+        self.len_x = len(self.dm.dataset.train_x)
+        self.len_u = len(self.dm.dataset.train_u)
+        self.len_tot = self.len_x + self.len_u
+
+        if self.baseline == 'fixmatch':
+            self.pl_mask = FixMatchMask(self.conf_thre)
+        elif self.baseline == 'flexmatch':
+            self.pl_mask = FlexMatchMask(self.num_classes, self.len_tot, self.conf_thre)
+
 
     def check_cfg(self, cfg):
         assert len(cfg.TRAINER.ME.STRONG_TRANSFORMS) > 0
@@ -92,44 +100,51 @@ class ME(TrainerXU):
     
     def forward_backward(self, batch_x, batch_u):
         parsed_data = self.parse_batch_train(batch_x, batch_u)
-        input_x, input_x2, label_x, input_u, input_u2, label_u = parsed_data
+        input_x, input_x2, label_x, input_u, input_u2, label_u, index_x, index_u = parsed_data
         input_u = torch.cat([input_x, input_u], 0)
         input_u2 = torch.cat([input_x2, input_u2], 0)
+        index_u = torch.cat([index_x, index_u])
         n_x = input_x.size(0)
 
+        ####################
         # Generate pseudo labels
+        ####################
         with torch.no_grad():
-            output_u = F.softmax(self.C(self.G(input_u), stochastic=False), 1)
-            max_prob, label_u_pred = output_u.max(1)
-            mask_u = (max_prob >= self.conf_thre).float()
+            prob_u = F.softmax(self.C(self.G(input_u), stochastic=False), 1)
+            max_probs, pseudo_labels = prob_u.max(1)
+            mask_u = self.pl_mask(max_probs, pseudo_labels, index_u)
 
             # Evaluate pseudo labels' accuracy
             y_u_pred_stats = self.assess_y_pred_quality(
-                label_u_pred[n_x:], label_u, mask_u[n_x:]
+                pseudo_labels[n_x:], label_u, mask_u[n_x:]
             )
 
+        ####################
         # Supervised loss
+        ####################
         output_x = self.C(self.G(input_x), stochastic=False)
         loss_x = F.cross_entropy(output_x, label_x)
 
+        ####################
         # Unsupervised loss
+        ####################
         output_u = self.C(self.G(input_u2), stochastic=False)
-        loss_u = F.cross_entropy(output_u, label_u_pred, reduction="none")
+        loss_u = F.cross_entropy(output_u, pseudo_labels, reduction="none")
         loss_u = (loss_u * mask_u).mean()
 
         ####################
         # Marginal Entropy loss
         ####################
         if self.me:
-            output_u_marginal = F.softmax(output_u, 1).mean(0)
+            prob_u_marginal = F.softmax(output_u, 1).mean(0)
 
             if self.me == 'shannon':
-                loss_marginal_entropy = self.weight_h * (output_u_marginal * torch.log(output_u_marginal + 1e-9)).sum()
+                loss_marginal_entropy = self.weight_h * (prob_u_marginal * torch.log(prob_u_marginal + 1e-9)).sum()
             elif self.me == 'alpha':
                 if self.weight_h == 1:
-                    loss_marginal_entropy = (output_u_marginal * torch.log(output_u_marginal + 1e-9)).sum()
+                    loss_marginal_entropy = (prob_u_marginal * torch.log(prob_u_marginal + 1e-9)).sum()
                 else:
-                    loss_marginal_entropy = (1/(1-self.weight_h)) * (output_u_marginal ** self.weight_h).sum()
+                    loss_marginal_entropy = (1/(1-self.weight_h)) * (prob_u_marginal ** self.weight_h).sum()
             else:
                 raise ValueError(f"Unknown marginal entropy type: {self.me}")
             
@@ -170,6 +185,8 @@ class ME(TrainerXU):
         input_u2 = batch_u["img2"]
         # label_u is used only for evaluating pseudo labels' accuracy
         label_u = batch_u["label"]
+        index_x = batch_x["index"]
+        index_u = batch_u["index"] + self.len_x
 
         input_x = input_x.to(self.device)
         input_x2 = input_x2.to(self.device)
@@ -178,7 +195,7 @@ class ME(TrainerXU):
         input_u2 = input_u2.to(self.device)
         label_u = label_u.to(self.device)
 
-        return input_x, input_x2, label_x, input_u, input_u2, label_u
+        return input_x, input_x2, label_x, input_u, input_u2, label_u, index_x, index_u
 
     def model_inference(self, input):
         
