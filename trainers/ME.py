@@ -145,7 +145,7 @@ class ME(TrainerXU):
                 if self.weight_h == 1:
                     loss_marginal_entropy = (prob_u_marginal * torch.log(prob_u_marginal + 1e-9)).sum()
                 else:
-                    loss_marginal_entropy = (1/(1-self.weight_h)) * (prob_u_marginal ** self.weight_h).sum()
+                    loss_marginal_entropy = (1/(self.weight_h-1)) * (1 - prob_u_marginal ** self.weight_h).sum()
             else:
                 raise ValueError(f"Unknown marginal entropy type: {self.me}")
             
