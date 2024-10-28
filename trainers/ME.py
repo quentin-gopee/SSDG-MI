@@ -112,7 +112,8 @@ class ME(TrainerXU):
         with torch.no_grad():
             prob_u = F.softmax(self.C(self.G(input_u), stochastic=False), 1)
             max_probs, pseudo_labels = prob_u.max(1)
-            mask_u = self.pl_mask(max_probs, pseudo_labels, index_u)
+            mask_dict = self.pl_mask(max_probs, pseudo_labels, index_u)
+            mask_u = mask_dict["mask"]
 
             # Evaluate pseudo labels' accuracy
             y_u_pred_stats = self.assess_y_pred_quality(
@@ -171,6 +172,8 @@ class ME(TrainerXU):
         loss_summary["y_u_pred_acc_raw"] = y_u_pred_stats["acc_raw"]
         loss_summary["y_u_pred_keep_rate"] = y_u_pred_stats["keep_rate"]
 
+        if self.baseline == 'flexmatch':
+            loss_summary["mean_threshold"] = mask_dict["classwise_treshold"].mean()
 
         if (self.batch_idx + 1) == self.num_batches:
             self.update_lr()

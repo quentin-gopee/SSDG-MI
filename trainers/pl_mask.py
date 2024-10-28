@@ -46,7 +46,8 @@ class FlexMatchMask(PLMask):
                 self.classwise_acc[i] = pseudo_counter[i] / max(pseudo_counter.values())
 
     def compute_mask(self, max_probs, pseudo_labels, idx_ulb):
-        mask = max_probs.ge(self.conf_thre * (self.classwise_acc[pseudo_labels] / (2. - self.classwise_acc[pseudo_labels])))  # convex
+        classwise_treshold = self.conf_thre * (self.classwise_acc[pseudo_labels] / (2. - self.classwise_acc[pseudo_labels])) # convex
+        mask = max_probs.ge(classwise_treshold)
         select = max_probs.ge(self.conf_thre)
         mask = mask.to(max_probs.dtype)
 
@@ -55,4 +56,10 @@ class FlexMatchMask(PLMask):
             self.selected_label[idx_ulb[select == 1]] = pseudo_labels[select == 1]
         self.update()
 
-        return mask
+        output = {
+            "mask": mask,
+            "selected_label": self.selected_label,
+            "classwise_threshold": classwise_treshold
+        }
+
+        return output
