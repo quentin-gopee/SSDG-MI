@@ -46,6 +46,11 @@ class FlexMatchMask(PLMask):
                 self.classwise_acc[i] = pseudo_counter[i] / max(pseudo_counter.values())
 
     def compute_mask(self, max_probs, pseudo_labels, idx_ulb):
+        if not self.selected_label.is_cuda:
+            self.selected_label = self.selected_label.to(max_probs.device)
+        if not self.classwise_acc.is_cuda:
+            self.classwise_acc = self.classwise_acc.to(max_probs.device)
+            
         classwise_treshold = self.conf_thre * (self.classwise_acc[pseudo_labels] / (2. - self.classwise_acc[pseudo_labels])) # convex
         mask = max_probs.ge(classwise_treshold)
         select = max_probs.ge(self.conf_thre)

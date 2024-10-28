@@ -16,7 +16,7 @@ from dassl.optim import build_optimizer, build_lr_scheduler
 from dassl.data.transforms import build_transform
 from dassl.utils import count_num_param
 
-from pl_mask import FixMatchMask, FlexMatchMask
+from .pl_mask import FixMatchMask, FlexMatchMask
 
 
 class NormalClassifier(nn.Module):
@@ -112,7 +112,7 @@ class ME(TrainerXU):
         with torch.no_grad():
             prob_u = F.softmax(self.C(self.G(input_u), stochastic=False), 1)
             max_probs, pseudo_labels = prob_u.max(1)
-            mask_dict = self.pl_mask(max_probs, pseudo_labels, index_u)
+            mask_dict = self.pl_mask.compute_mask(max_probs, pseudo_labels, index_u)
             mask_u = mask_dict["mask"]
 
             # Evaluate pseudo labels' accuracy
@@ -173,7 +173,7 @@ class ME(TrainerXU):
         loss_summary["y_u_pred_keep_rate"] = y_u_pred_stats["keep_rate"]
 
         if self.baseline == 'flexmatch':
-            loss_summary["mean_threshold"] = mask_dict["classwise_treshold"].mean()
+            loss_summary["mean_threshold"] = mask_dict["classwise_threshold"].mean()
 
         if (self.batch_idx + 1) == self.num_batches:
             self.update_lr()
@@ -197,6 +197,8 @@ class ME(TrainerXU):
         input_u = input_u.to(self.device)
         input_u2 = input_u2.to(self.device)
         label_u = label_u.to(self.device)
+        index_x = index_x.to(self.device)
+        index_u = index_u.to(self.device)
 
         return input_x, input_x2, label_x, input_u, input_u2, label_u, index_x, index_u
 
