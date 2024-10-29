@@ -16,7 +16,8 @@ from dassl.optim import build_optimizer, build_lr_scheduler
 from dassl.data.transforms import build_transform
 from dassl.utils import count_num_param
 
-from .pl_mask import FixMatchMask, FlexMatchMask
+from .utils.pl_mask import FixMatchMask, FlexMatchMask
+from .utils.freematch import self_adaptative_fairness
 
 
 class NormalClassifier(nn.Module):
@@ -49,6 +50,9 @@ class ME(TrainerXU):
             self.pl_mask = FixMatchMask(self.conf_thre)
         elif self.baseline == 'flexmatch':
             self.pl_mask = FlexMatchMask(self.num_classes, self.len_tot, self.conf_thre)
+        elif self.baseline == 'freematch':
+            self.pl_mask = FlexMatchMask(self.num_classes)
+            self.weight_f = 0.001
 
 
     def check_cfg(self, cfg):
@@ -112,8 +116,7 @@ class ME(TrainerXU):
         with torch.no_grad():
             prob_u = F.softmax(self.C(self.G(input_u), stochastic=False), 1)
             max_probs, pseudo_labels = prob_u.max(1)
-            mask_dict = self.pl_mask.compute_mask(max_probs, pseudo_labels, index_u)
-            mask_u = mask_dict["mask"]
+            mask_u = self.pl_mask.compute_mask(max_probs, pseudo_labels, index_u)
 
             # Evaluate pseudo labels' accuracy
             y_u_pred_stats = self.assess_y_pred_quality(
@@ -132,6 +135,9 @@ class ME(TrainerXU):
         output_u = self.C(self.G(input_u2), stochastic=False)
         loss_u = F.cross_entropy(output_u, pseudo_labels, reduction="none")
         loss_u = (loss_u * mask_u).mean()
+
+        if self.baseline == 'freematch':
+            loss_saf, _ = self_adaptative_fairness(mask_u, output_u, self.pl_mask.p_model, self.pl_mask.label_hist)
 
         ####################
         # Marginal Entropy loss
@@ -158,6 +164,10 @@ class ME(TrainerXU):
         loss_all += loss_u
         loss_summary["loss_u_aug"] = loss_u.item()
 
+        if self.baseline == 'freematch':
+            loss_all += self.weight_f * loss_saf
+            loss_summary["loss_sat"] = loss_saf.item()
+
         if self.me:
             loss_all += loss_marginal_entropy
             loss_summary["loss_marginal_entropy"] = loss_marginal_entropy.item()
@@ -173,7 +183,7 @@ class ME(TrainerXU):
         loss_summary["y_u_pred_keep_rate"] = y_u_pred_stats["keep_rate"]
 
         if self.baseline == 'flexmatch':
-            loss_summary["mean_threshold"] = mask_dict["classwise_threshold"].mean()
+            loss_summary["mean_threshold"] = self.pl_mask.classwise_threshold.mean()
 
         if (self.batch_idx + 1) == self.num_batches:
             self.update_lr()
