@@ -29,7 +29,7 @@ TRAINER=ME
 NET=resnet18
 
 # File to store configs that need training
-NEED_TRAINING_FILE=scripts/FBCSA/configs/ME_${DATASET}.json
+NEED_TRAINING_FILE=scripts/ME/configs/ME_${DATASET}.json
 # Initialize the JSON file
 echo "[]" > ${NEED_TRAINING_FILE}
 
@@ -94,59 +94,59 @@ check_configs() {
 }
 
 # # Main training loop
-# while true; do
-# Reset the need_training.json file
-echo "[]" > ${NEED_TRAINING_FILE}
+while true; do
+    # Reset the need_training.json file
+    echo "[]" > ${NEED_TRAINING_FILE}
 
-# Check directories for configs that need training
-check_configs
+    # Check directories for configs that need training
+    check_configs
 
-# Get the number of configs that need training
-NUM_TRAINING=$(jq length ${NEED_TRAINING_FILE})
-echo "Number of configs that need training: ${NUM_TRAINING}"
+    # Get the number of configs that need training
+    NUM_TRAINING=$(jq length ${NEED_TRAINING_FILE})
+    echo "Number of configs that need training: ${NUM_TRAINING}"
 
-if [ ${NUM_TRAINING} -eq 0 ]; then
-    echo "All configs are trained!"
-    break
-fi
+    if [ ${NUM_TRAINING} -eq 0 ]; then
+        echo "All configs are trained!"
+        break
+    fi
 
-echo "Training remaining configs..."
-for row in $(jq -c '.[]' ${NEED_TRAINING_FILE}); do
-    SETUP=$(echo $row | jq -r '.setup')
-    SEED=$(echo $row | jq -r '.seed')
+    echo "Training remaining configs..."
+    for row in $(jq -c '.[]' ${NEED_TRAINING_FILE}); do
+        SETUP=$(echo $row | jq -r '.setup')
+        SEED=$(echo $row | jq -r '.seed')
 
-    set_domains ${SETUP}
+        set_domains ${SETUP}
 
-    echo "Training config: imbalance=${IMBALANCE}, setup=${SETUP}, seed=${SEED}"
+        echo "Training config: imbalance=${IMBALANCE}, setup=${SETUP}, seed=${SEED}"
 
-    # Wait for a GPU to become available before launching a new experiment
-    echo "Waiting for a GPU to become available..."
-    while [ $(jobs -r | wc -l) -ge ${NUM_GPUS} ]; do
-        sleep 1
+        # Wait for a GPU to become available before launching a new experiment
+        echo "Waiting for a GPU to become available..."
+        while [ $(jobs -r | wc -l) -ge ${NUM_GPUS} ]; do
+            sleep 1
+        done
+
+        DIRECTORY=output/${DATASET}/nlab_${NLAB}/${BASELINE}/${IMBALANCE}/${TRAINER}/baseline/batchsize_${BATCH_SIZE}/${TRAINER}/${NET}/${T}/seed${SEED}
+        # Assign a GPU and run the process in the background
+        CUDA_VISIBLE_DEVICES=${GPUS[GPU_INDEX]} python train.py \
+        --root ${DATA} \
+        --seed ${SEED} \
+        --trainer ${TRAINER} \
+        --source-domains ${S1} ${S2} ${S3} \
+        --target-domains ${T} \
+        --dataset-config-file configs/datasets/${DATASET}.yaml \
+        --config-file configs/trainers/${TRAINER}/${DATASET}.yaml \
+        --output-dir ${DIRECTORY} \
+        --imbalance ${IMBALANCE} \
+        --gamma ${GAMMA} \
+        --batch-size ${BATCH_SIZE} \
+        --baseline ${BASELINE} \
+        MODEL.BACKBONE.NAME ${NET} \
+        DATASET.NUM_LABELED ${NLAB} &
+
+        # Move to the next GPU
+        GPU_INDEX=$(( (GPU_INDEX + 1) % ${NUM_GPUS} ))
     done
-
-    DIRECTORY=output/${DATASET}/nlab_${NLAB}/${BASELINE}/${IMBALANCE}/${TRAINER}/baseline/batchsize_${BATCH_SIZE}/${TRAINER}/${NET}/${T}/seed${SEED}
-    # Assign a GPU and run the process in the background
-    CUDA_VISIBLE_DEVICES=${GPUS[GPU_INDEX]} python train.py \
-    --root ${DATA} \
-    --seed ${SEED} \
-    --trainer ${TRAINER} \
-    --source-domains ${S1} ${S2} ${S3} \
-    --target-domains ${T} \
-    --dataset-config-file configs/datasets/${DATASET}.yaml \
-    --config-file configs/trainers/${TRAINER}/${DATASET}.yaml \
-    --output-dir ${DIRECTORY} \
-    --imbalance ${IMBALANCE} \
-    --gamma ${GAMMA} \
-    --batch-size ${BATCH_SIZE} \
-    --baseline ${BASELINE} \
-    MODEL.BACKBONE.NAME ${NET} \
-    DATASET.NUM_LABELED ${NLAB} &
-
-    # Move to the next GPU
-    GPU_INDEX=$(( (GPU_INDEX + 1) % ${NUM_GPUS} ))
+    # Wait for all background processes to finish before exiting
+    wait
+    echo "Rechecking for remaining configs..."
 done
-# Wait for all background processes to finish before exiting
-wait
-echo "Rechecking for remaining configs..."
-# done

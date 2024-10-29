@@ -16,7 +16,6 @@ import datasets.ssdg_digits_dg
 import datasets.ssdg_vlcs
 
 # trainers
-import trainers.FBCSA
 import trainers.ME
 
 

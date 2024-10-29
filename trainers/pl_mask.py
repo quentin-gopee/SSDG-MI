@@ -24,7 +24,8 @@ class FixMatchMask(PLMask):
     
     def compute_mask(self, max_probs, pseudo_labels=None, idx_ulb=None):
         mask = (max_probs >= self.conf_thre).float()
-        return mask
+        output = {"mask": mask}
+        return output
     
 
 class FlexMatchMask(PLMask):
@@ -50,9 +51,9 @@ class FlexMatchMask(PLMask):
             self.selected_label = self.selected_label.to(max_probs.device)
         if not self.classwise_acc.is_cuda:
             self.classwise_acc = self.classwise_acc.to(max_probs.device)
-            
-        classwise_treshold = self.conf_thre * (self.classwise_acc[pseudo_labels] / (2. - self.classwise_acc[pseudo_labels])) # convex
-        mask = max_probs.ge(classwise_treshold)
+
+        classwise_threshold = self.conf_thre * (self.classwise_acc[pseudo_labels] / (2. - self.classwise_acc[pseudo_labels])) # convex
+        mask = max_probs.ge(classwise_threshold)
         select = max_probs.ge(self.conf_thre)
         mask = mask.to(max_probs.dtype)
 
@@ -64,7 +65,7 @@ class FlexMatchMask(PLMask):
         output = {
             "mask": mask,
             "selected_label": self.selected_label,
-            "classwise_threshold": classwise_treshold
+            "classwise_threshold": classwise_threshold
         }
 
         return output

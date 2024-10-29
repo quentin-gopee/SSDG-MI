@@ -41,7 +41,7 @@ TRAINER=ME
 NET=resnet18
 
 # File to store configs that need training
-NEED_TRAINING_FILE=scripts/FBCSA/configs/ME_${DATASET}.json
+NEED_TRAINING_FILE=scripts/ME/configs/ME_${DATASET}.json
 # Initialize the JSON file
 echo "[]" > ${NEED_TRAINING_FILE}
 
@@ -86,7 +86,7 @@ check_configs() {
         do
             for SEED in 1 2 3 4 5
             do
-                for ALPHA in 0 #1 2 3 5 7
+                for ALPHA in 1 2 3 5 7
                 do
                     set_domains ${SETUP}
 
