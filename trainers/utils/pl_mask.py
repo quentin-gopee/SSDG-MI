@@ -80,6 +80,8 @@ class FreeMatch(PLMask):
         self.p_model = torch.ones((self.num_classes)) / self.num_classes
         self.label_hist = torch.ones((self.num_classes)) / self.num_classes
         self.time_p = self.p_model.mean()
+        
+        self.classwise_threshold = torch.zeros((self.num_classes,))
     
     @torch.no_grad()
     def update(self, max_probs, pseudo_labels):
@@ -100,6 +102,7 @@ class FreeMatch(PLMask):
         self.update(max_probs, pseudo_labels)
 
         mod = self.p_model / torch.max(self.p_model, dim=-1)[0]
-        mask = max_probs.ge(self.time_p * mod[pseudo_labels]).to(max_probs.dtype)
+        self.classwise_threshold = self.time_p * mod[pseudo_labels]
+        mask = max_probs.ge(self.classwise_threshold).to(max_probs.dtype)
 
         return mask

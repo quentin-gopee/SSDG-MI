@@ -182,7 +182,7 @@ class ME(TrainerXU):
         loss_summary["y_u_pred_acc_raw"] = y_u_pred_stats["acc_raw"]
         loss_summary["y_u_pred_keep_rate"] = y_u_pred_stats["keep_rate"]
 
-        if self.baseline == 'flexmatch':
+        if self.baseline in ['flexmatch', 'freematch']:
             loss_summary["mean_threshold"] = self.pl_mask.classwise_threshold.mean()
 
         if (self.batch_idx + 1) == self.num_batches:
