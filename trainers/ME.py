@@ -146,12 +146,12 @@ class ME(TrainerXU):
             prob_u_marginal = F.softmax(output_u, 1).mean(0)
 
             if self.me == 'shannon':
-                loss_marginal_entropy = self.weight_h * (prob_u_marginal * torch.log(prob_u_marginal + 1e-9)).sum()
+                loss_marginal_entropy = self.weight_h * (prob_u_marginal * torch.log(prob_u_marginal + 1e-12)).sum()
             elif self.me == 'alpha':
                 if self.weight_h == 1:
-                    loss_marginal_entropy = (prob_u_marginal * torch.log(prob_u_marginal + 1e-9)).sum()
+                    loss_marginal_entropy = (prob_u_marginal * torch.log(prob_u_marginal + 1e-12)).sum()
                 else:
-                    loss_marginal_entropy = (1/(self.weight_h-1)) * (1 - prob_u_marginal ** self.weight_h).sum()
+                    loss_marginal_entropy = -(1/(self.weight_h-1)) * (1 - (prob_u_marginal ** self.weight_h).sum())
             else:
                 raise ValueError(f"Unknown marginal entropy type: {self.me}")
             
@@ -166,7 +166,7 @@ class ME(TrainerXU):
 
         if self.baseline == 'freematch':
             loss_all += self.weight_f * loss_saf
-            loss_summary["loss_sat"] = loss_saf.item()
+            loss_summary["loss_sat"] = self.weight_f * loss_saf.item()
 
         if self.me:
             loss_all += loss_marginal_entropy
