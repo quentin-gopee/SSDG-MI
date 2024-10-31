@@ -16,7 +16,7 @@ from dassl.optim import build_optimizer, build_lr_scheduler
 from dassl.data.transforms import build_transform
 from dassl.utils import count_num_param
 
-from .utils.pl_mask import FixMatchMask, FlexMatchMask
+from .utils.pl_mask import FixMatchMask, FlexMatchMask, FreeMatchMask
 from .utils.freematch import self_adaptative_fairness
 
 
@@ -51,7 +51,7 @@ class ME(TrainerXU):
         elif self.baseline == 'flexmatch':
             self.pl_mask = FlexMatchMask(self.num_classes, self.len_tot, self.conf_thre)
         elif self.baseline == 'freematch':
-            self.pl_mask = FlexMatchMask(self.num_classes)
+            self.pl_mask = FreeMatchMask(self.num_classes)
             self.weight_f = 0.001
 
 
