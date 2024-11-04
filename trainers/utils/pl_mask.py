@@ -68,7 +68,7 @@ class FlexMatchMask(PLMask):
         return mask
 
 
-class FreeMatch(PLMask):
+class FreeMatchMask(PLMask):
     """
     FreeMatch Masking (adapted from TorchSSL)
     """
