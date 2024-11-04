@@ -65,6 +65,14 @@ def reset_cfg(cfg, args):
     if args.head:
         cfg.MODEL.HEAD.NAME = args.head
 
+    if args.imbalance:
+        cfg.DATASET.IMBALANCE = args.imbalance
+    
+    if args.gamma:
+        cfg.DATASET.GAMMA = args.gamma
+    else:
+        cfg.DATASET.GAMMA = None
+
     if args.me:
         cfg.TRAINER[args.trainer].ME = args.me
     else:
@@ -95,9 +103,6 @@ def extend_cfg(cfg, args):
     cfg.TRAINER[args.trainer].STRONG_TRANSFORMS = ()  # strong augmentations
     cfg.TRAINER[args.trainer].C_OPTIM = copy.deepcopy(cfg.OPTIM)  # classifier's optim setting
     cfg.TRAINER[args.trainer].CLASSIFIER = "normal"  # stochastic or normal
-    cfg.TRAINER[args.trainer].IMBALANCE = args.imbalance  # class imbalance type
-    cfg.TRAINER[args.trainer].GAMMA = args.gamma  # class imbalance ratio
-
 
 
 def setup_cfg(args):
