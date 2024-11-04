@@ -17,6 +17,7 @@ import datasets.ssdg_vlcs
 
 # trainers
 import trainers.ME
+import trainers.FBCSA
 
 
 def print_args(args, cfg):
@@ -65,14 +66,14 @@ def reset_cfg(cfg, args):
         cfg.MODEL.HEAD.NAME = args.head
 
     if args.me:
-        cfg.TRAINER.ME.ME = args.me
+        cfg.TRAINER[args.trainer].ME = args.me
     else:
-        cfg.TRAINER.ME.ME = None
+        cfg.TRAINER[args.trainer].ME = None
 
     if args.weight_h:
-        cfg.TRAINER.ME.WEIGHT_H = args.weight_h
+        cfg.TRAINER[args.trainer].WEIGHT_H = args.weight_h
     else:
-        cfg.TRAINER.ME.WEIGHT_H = None
+        cfg.TRAINER[args.trainer].WEIGHT_H = None
 
     if args.one_source_l:
         cfg.DATASET.ONE_SOURCE_L = args.one_source_l
@@ -85,17 +86,17 @@ def reset_cfg(cfg, args):
         print(f"Batch size: {cfg.DATALOADER.TRAIN_X.BATCH_SIZE}")
 
     if args.baseline:
-        cfg.TRAINER.ME.BASELINE = args.baseline
+        cfg.TRAINER[args.trainer].BASELINE = args.baseline
 
 
 def extend_cfg(cfg, args):
-    cfg.TRAINER.ME = CN()
-    cfg.TRAINER.ME.CONF_THRE = 0.95  # confidence threshold
-    cfg.TRAINER.ME.STRONG_TRANSFORMS = ()  # strong augmentations
-    cfg.TRAINER.ME.C_OPTIM = copy.deepcopy(cfg.OPTIM)  # classifier's optim setting
-    cfg.TRAINER.ME.CLASSIFIER = "normal"  # stochastic or normal
-    cfg.TRAINER.ME.IMBALANCE = args.imbalance  # class imbalance type
-    cfg.TRAINER.ME.GAMMA = args.gamma  # class imbalance ratio
+    cfg.TRAINER[args.trainer] = CN()
+    cfg.TRAINER[args.trainer].CONF_THRE = 0.95  # confidence threshold
+    cfg.TRAINER[args.trainer].STRONG_TRANSFORMS = ()  # strong augmentations
+    cfg.TRAINER[args.trainer].C_OPTIM = copy.deepcopy(cfg.OPTIM)  # classifier's optim setting
+    cfg.TRAINER[args.trainer].CLASSIFIER = "normal"  # stochastic or normal
+    cfg.TRAINER[args.trainer].IMBALANCE = args.imbalance  # class imbalance type
+    cfg.TRAINER[args.trainer].GAMMA = args.gamma  # class imbalance ratio
 
 
 
@@ -197,8 +198,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--imbalance",
         type=str,
-        default="uniform",
-        help="randomize the number of labels per class"
+        default="unilab",
+        help="label imbalance type (unilab or ltlab)"
     )
     parser.add_argument(
         "--gamma",

@@ -8,8 +8,7 @@ from dassl.utils import listdir_nohidden
 from dassl.data.datasets import DATASET_REGISTRY, Datum, DatasetBase
 from dassl.utils import mkdir_if_missing
 
-from .utils import random_numbers, exp_imbalance_l, count_classes
-
+from .utils import exp_imbalance_l, count_classes, write_json_train, read_json_train
 
 
 @DATASET_REGISTRY.register(force=True)
@@ -48,20 +47,23 @@ class SSDGVLCS(DatasetBase):
         tgt_domain = cfg.DATASET.TARGET_DOMAINS[0]
 
         split_ssdg_path = osp.join(
-            self.split_ssdg_dir, f"{tgt_domain}_nlab{num_labeled}_{cfg.TRAINER.ME.IMBALANCE}_seed{seed}.json"
+            self.split_ssdg_dir, f"{tgt_domain}_nlab{num_labeled}_{cfg.DATASET.IMBALANCE}_seed{seed}.json"
         )
         if not osp.exists(split_ssdg_path):
             train_x, train_u = self._read_data_train(
                     cfg.DATASET.SOURCE_DOMAINS,
                     "full",
                     num_labeled,
-                    cfg.TRAINER.ME.IMBALANCE,
-                    gamma=cfg.TRAINER.ME.GAMMA,
+                    cfg.DATASET.IMBALANCE,
+                    gamma=cfg.DATASET.GAMMA,
                     one_source_l=cfg.DATASET.ONE_SOURCE_L
                 )
+            write_json_train(
+                split_ssdg_path, src_domains, self.dataset_dir, train_x, train_u
+            )
         else:
-            train_x, train_u = self.read_json_train(
-                split_ssdg_path, src_domains, self.image_dir
+            train_x, train_u = read_json_train(
+                split_ssdg_path, src_domains, self.dataset_dir
             )
 
         val = self._read_data_test(cfg.DATASET.SOURCE_DOMAINS, "crossval")
@@ -74,24 +76,6 @@ class SSDGVLCS(DatasetBase):
         print(count_classes(train_u))
 
         super().__init__(train_x=train_x, train_u=train_u, val=val, test=test)
-
-    # def _read_data(self, input_domains, split):
-    #     items = []
-
-    #     for domain, dname in enumerate(input_domains):
-    #         dname = dname.upper()
-    #         path = osp.join(self.dataset_dir, dname, split)
-    #         folders = listdir_nohidden(path)
-    #         folders.sort()
-
-    #         for label, folder in enumerate(folders):
-    #             impaths = glob.glob(osp.join(path, folder, "*.jpg"))
-
-    #             for impath in impaths:
-    #                 item = Datum(impath=impath, label=label, domain=domain)
-    #                 items.append(item)
-
-    #     return items
 
 
     def _read_data_train(self, input_domains, split, num_labeled, imbalance, gamma=None, one_source_l=None):
@@ -115,18 +99,11 @@ class SSDGVLCS(DatasetBase):
             for folder in folders]
 
             # Original implementation
-            if imbalance == "original":
+            if imbalance == "unilab":
                 num_labeled_per_cd = np.ones((num_domains, len(labels))) * num_labeled // (num_domains * len(labels))
 
-            # Randomly assign number of labeled samples per class and domain
-            elif imbalance == "random":
-                num_labeled_per_domain = num_labeled // num_domains
-                num_labeled_per_cd = []
-                for d in range(num_domains):
-                    num_labeled_per_cd.append(random_numbers(num_labeled_per_domain, len(labels)))
-
             # Exponential (long-tail) imbalance on labeled samples only
-            elif imbalance == "exp_l_only":
+            elif imbalance == "ltlab":
                 num_labeled_per_domain = num_labeled // num_domains
                 num_labeled_per_cd = exp_imbalance_l(num_labeled_per_domain, len(labels), gamma)
                 assert (num_labeled_per_cd[::-1] <= np.sort(min_distribution)).all(), 'No configuration possible with the current number of samples'
@@ -180,15 +157,11 @@ class SSDGVLCS(DatasetBase):
             ]
 
             # Original implementation
-            if imbalance == "original":
+            if imbalance == "unilab":
                 num_labeled_per_class = np.ones(len(labels)) * num_labeled // len(labels)
 
-            # Randomly assign number of labeled samples per class and domain
-            elif imbalance == "random":
-                num_labeled_per_class = random_numbers(num_labeled, len(labels))
-
             # Exponential (long-tail) imbalance on labeled samples only
-            elif imbalance == "exp_l_only":
+            elif imbalance == "ltlab":
                 num_labeled_per_class = exp_imbalance_l(num_labeled, len(labels), gamma)
                 assert (num_labeled_per_class[::-1] <= np.sort(distribution)).all(), 'No configuration possible with the current number of samples'
                 random.shuffle(labels) # randomize the majority class

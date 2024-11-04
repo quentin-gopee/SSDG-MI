@@ -4,9 +4,9 @@ from collections import defaultdict
 import numpy as np
 
 from dassl.data.datasets import DATASET_REGISTRY, Datum, DatasetBase
-from dassl.utils import mkdir_if_missing, read_json, write_json
+from dassl.utils import mkdir_if_missing
 
-from .utils import random_numbers, exp_imbalance_l, exp_imbalance_u, count_classes
+from .utils import exp_imbalance_l, count_classes, write_json_train, read_json_train
 
 
 @DATASET_REGISTRY.register(force=True)
@@ -56,18 +56,21 @@ class SSDGPACS(DatasetBase):
         print(cfg.DATASET.ONE_SOURCE_L)
 
         split_ssdg_path = osp.join(
-            self.split_ssdg_dir, f"{tgt_domain}_nlab{num_labeled}_{cfg.TRAINER.ME.IMBALANCE}_seed{seed}.json"
+            self.split_ssdg_dir, f"{tgt_domain}_nlab{num_labeled}_{cfg.DATASET.IMBALANCE}_seed{seed}.json"
         )
         if not osp.exists(split_ssdg_path):
             train_x, train_u = self._read_data_train(
                     cfg.DATASET.SOURCE_DOMAINS,
                     num_labeled,
-                    cfg.TRAINER.ME.IMBALANCE,
-                    gamma=cfg.TRAINER.ME.GAMMA,
+                    cfg.DATASET.IMBALANCE,
+                    gamma=cfg.DATASET.GAMMA,
                     one_source_l=cfg.DATASET.ONE_SOURCE_L
                 )
+            write_json_train(
+                split_ssdg_path, src_domains, self.image_dir, train_x, train_u
+            )
         else:
-            train_x, train_u = self.read_json_train(
+            train_x, train_u = read_json_train(
                 split_ssdg_path, src_domains, self.image_dir
             )
         
@@ -84,60 +87,6 @@ class SSDGPACS(DatasetBase):
         print(count_classes(train_u))
 
         super().__init__(train_x=train_x, train_u=train_u, val=val, test=test)
-
-    @staticmethod
-    def read_json_train(filepath, src_domains, image_dir):
-        """
-        The latest office_home_dg dataset's class folders have
-        been changed to only contain the class names, e.g.,
-        000_Alarm_Clock/ is changed to Alarm_Clock/.
-        """
-
-        def _convert_to_datums(items):
-            out = []
-            for impath, label, dname in items:
-                if dname not in src_domains:
-                    continue
-                domain = src_domains.index(dname)
-                impath2 = osp.join(image_dir, impath)
-                if not osp.exists(impath2):
-                    impath = impath.split("/")
-                    if impath[-2].startswith("0"):
-                        impath[-2] = impath[-2][4:]
-                    impath = "/".join(impath)
-                    impath2 = osp.join(image_dir, impath)
-                item = Datum(impath=impath2, label=int(label), domain=domain)
-                out.append(item)
-            return out
-
-        print(f'Reading split from "{filepath}"')
-        split = read_json(filepath)
-        train_x = _convert_to_datums(split["train_x"])
-        train_u = _convert_to_datums(split["train_u"])
-
-        return train_x, train_u
-
-    # @staticmethod
-    # def write_json_train(filepath, src_domains, image_dir, train_x, train_u):
-    #     def _convert_to_list(items):
-    #         out = []
-    #         for item in items:
-    #             impath = item.impath
-    #             label = item.label
-    #             domain = item.domain
-    #             dname = src_domains[domain]
-    #             impath = impath.replace(image_dir, "")
-    #             if impath.startswith("/") or impath.startswith("\\"):
-    #                 impath = impath[1:]
-    #             out.append((impath, label, dname))
-    #         return out
-
-    #     train_x = _convert_to_list(train_x)
-    #     train_u = _convert_to_list(train_u)
-    #     output = {"train_x": train_x, "train_u": train_u}
-
-    #     write_json(output, filepath)
-    #     print(f'Saved the split to "{filepath}"')
 
     def _read_data_train(self, input_domains, num_labeled, imbalance, gamma=None, one_source_l=None):
         num_domains = len(input_domains)
@@ -161,46 +110,15 @@ class SSDGPACS(DatasetBase):
             labels = list(impath_label_dict.keys())
 
             # Original implementation
-            if imbalance == "original":
+            if imbalance == "unilab":
                 num_labeled_per_cd = np.ones((num_domains, len(labels))) * num_labeled // (num_domains * len(labels))
-
-            # Randomly assign number of labeled samples per class and domain
-            elif imbalance == "random":
-                num_labeled_per_domain = num_labeled // num_domains
-                num_labeled_per_cd = []
-                for d in range(num_domains):
-                    num_labeled_per_cd.append(random_numbers(num_labeled_per_domain, len(labels)))
-
-            # Exponential (long-tail) imbalance on both labeled and unlabeled samples
-            elif imbalance == "exp":
-                num_labeled_per_domain = num_labeled // num_domains
-                num_labeled_per_cd = exp_imbalance_l(num_labeled_per_domain, len(labels), gamma)
-
-                random.shuffle(labels) # randomize the majority class
-                m1 = len(impath_label_dict[labels[0]]) - num_labeled_per_cd[labels[0]]*num_domains
-                num_unlabeled_per_cd = exp_imbalance_u(m1, len(labels), gamma)
-
-                num_labeled_per_cd = [[num_labeled_per_cd[label] for label in labels] for _ in range(num_domains)]
-                num_unlabeled_per_cd = [[num_unlabeled_per_cd[label] for label in labels] for _ in range(num_domains)]
 
             # Exponential (long-tail) imbalance on labeled samples only
-            elif imbalance == "exp_l_only":
+            elif imbalance == "ltlab":
                 num_labeled_per_domain = num_labeled // num_domains
                 num_labeled_per_cd = exp_imbalance_l(num_labeled_per_domain, len(labels), gamma)
                 random.shuffle(labels) # randomize the majority class
                 num_labeled_per_cd = [[num_labeled_per_cd[label] for label in labels] for _ in range(num_domains)]
-
-            # Uniform distribution with the same number of unlabeled samples as in the exponential imbalance to compare both settings
-            elif imbalance == "uniform_exp_like":
-                num_labeled_per_domain = num_labeled // num_domains
-                num_labeled_per_cd = exp_imbalance_l(num_labeled_per_domain, len(labels), gamma)
-
-                random.shuffle(labels) # randomize the majority class
-                m1 = len(impath_label_dict[labels[0]]) - num_labeled_per_cd[labels[0]]*num_domains
-                num_unlabeled_per_cd = exp_imbalance_u(m1, len(labels), gamma)
-
-                num_labeled_per_cd = np.ones((num_domains, len(labels))) * num_labeled // (num_domains * len(labels))
-                num_unlabeled_per_cd = np.ones((num_domains, len(labels))) * np.sum(num_unlabeled_per_cd) // (num_domains * len(labels))
 
             else:
                 raise ValueError(f"Unknown imbalance type for all sources labelled: {imbalance}")
@@ -248,15 +166,11 @@ class SSDGPACS(DatasetBase):
             labels = list(impath_label_dict.keys())
 
             # Original implementation
-            if imbalance == "original":
+            if imbalance == "unilab":
                 num_labeled_per_class = np.ones(len(labels)) * num_labeled // len(labels)
 
-            # Randomly assign number of labeled samples per class and domain
-            elif imbalance == "random":
-                num_labeled_per_class = random_numbers(num_labeled, len(labels))
-
             # Exponential (long-tail) imbalance on labeled samples only
-            elif imbalance == "exp_l_only":
+            elif imbalance == "ltlab":
                 num_labeled_per_class = exp_imbalance_l(num_labeled, len(labels), gamma)
                 random.shuffle(labels) # randomize the majority class
                 num_labeled_per_class = [num_labeled_per_class[label] for label in labels]

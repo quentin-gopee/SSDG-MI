@@ -20,8 +20,9 @@ TRAIN:
   PRINT_FREQ: 10
 
 TRAINER:
-  FBASA:
-    STRONG_TRANSFORMS: ["random_flip", "randaugment_fixmatch", "normalize", "cutout"]
+  FBCSA:
+    STRONG_TRANSFORMS:
+      ["random_flip", "randaugment_fixmatch", "normalize", "cutout"]
     C_OPTIM:
       NAME: "sgd"
       LR: 0.01
