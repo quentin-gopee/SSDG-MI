@@ -17,6 +17,8 @@ from dassl.data.transforms import build_transform
 from dassl.utils import count_num_param
 
 from .utils.adain.adain import AdaIN
+from .utils.pl_mask import FixMatchMask, FlexMatchMask, FreeMatchMask
+from .utils.freematch import self_adaptative_fairness
 
 
 class NormalClassifier(nn.Module):
@@ -39,19 +41,25 @@ class FBCSA(TrainerXU):
         super().__init__(cfg)
 
         self.conf_thre = cfg.TRAINER.FBCSA.CONF_THRE
+        self.baseline = cfg.TRAINER.FBCSA.BASELINE
+        self.len_x = len(self.dm.dataset.train_x)
+        self.len_u = len(self.dm.dataset.train_u)
+        self.len_tot = self.len_x + self.len_u
 
-        norm_mean = None
-        norm_std = None
-
-        if "normalize" in cfg.INPUT.TRANSFORMS:
-            norm_mean = cfg.INPUT.PIXEL_MEAN
-            norm_std = cfg.INPUT.PIXEL_STD
+        if self.baseline == 'fixmatch':
+            self.pl_mask = FixMatchMask(self.conf_thre)
+        elif self.baseline == 'flexmatch':
+            self.pl_mask = FlexMatchMask(self.num_classes, self.len_tot, self.conf_thre)
+        elif self.baseline == 'freematch':
+            self.pl_mask = FreeMatchMask(self.num_classes)
+            self.weight_f = 0.001
 
 
     def check_cfg(self, cfg):
         assert len(cfg.TRAINER.FBCSA.STRONG_TRANSFORMS) > 0
         assert cfg.DATALOADER.TRAIN_X.SAMPLER == "SeqDomainSampler"
         assert cfg.DATALOADER.TRAIN_U.SAME_AS_X
+        assert cfg.TRAINER.ME.BASELINE in ['fixmatch', 'freematch', 'flexmatch']
 
     def build_data_loader(self):
         cfg = self.cfg
@@ -109,15 +117,19 @@ class FBCSA(TrainerXU):
         u_aug = parsed_batch["u_aug"]
         y_u_true = parsed_batch["y_u_true"]  # tensor
 
+        index_x = parsed_batch["index_x"]
+        index_u = parsed_batch["index_u"]
+
         K = self.num_source_domains
         # NOTE: If num_source_domains=1, we split a batch into two halves
         K = 2 if K == 1 else K
 
         ####################
-        # Generate pseudo labels & simillarity based labels
+        # Generate pseudo labels & similarity based labels
         ####################
         with torch.no_grad():
             p_xu = []
+            index_xu = []
             for k in range(K):
                 x_k = x[k]
                 u_k = u[k]
@@ -125,10 +137,13 @@ class FBCSA(TrainerXU):
                 z_xu_k = self.C(self.G(xu_k), stochastic=False)
                 p_xu_k = F.softmax(z_xu_k, 1)
                 p_xu.append(p_xu_k)
+                index_xu_k = torch.cat([index_x[k], index_u[k]], 0)
+                index_xu.append(index_xu_k)
             p_xu = torch.cat(p_xu, 0)
+            index_xu = torch.cat(index_xu, 0)
 
             p_xu_maxval, y_xu_pred = p_xu.max(1)
-            mask_xu = (p_xu_maxval >= self.conf_thre).float()
+            mask_xu = self.pl_mask.compute_mask(p_xu_maxval, y_xu_pred, index_xu)
 
             y_xu_pred = y_xu_pred.chunk(K)
             mask_xu = mask_xu.chunk(K)
@@ -161,6 +176,7 @@ class FBCSA(TrainerXU):
         loss_u_aug = 0
         loss_u_feat_clas = 0
         loss_u_sim = 0
+        z_xu_aug = []
         for k in range(K):
             y_xu_k_pred = y_xu_pred[k]
             mask_xu_k = mask_xu[k]
@@ -171,6 +187,7 @@ class FBCSA(TrainerXU):
             xu_k_aug = torch.cat([x_k_aug, u_k_aug], 0)
             f_xu_k_aug = self.G(xu_k_aug)
             z_xu_k_aug = self.C(f_xu_k_aug, stochastic=True)
+            z_xu_aug.append(z_xu_k_aug)
             loss = F.cross_entropy(z_xu_k_aug, y_xu_k_pred, reduction="none")
             loss = (loss * mask_xu_k).mean()
             loss_u_aug += loss
@@ -207,6 +224,11 @@ class FBCSA(TrainerXU):
             loss_sim = (loss_sim * mask_xu_k).mean()
             loss_u_sim += loss_sim * 0.5
 
+        # FreeMatch SAT loss
+        if self.baseline == 'freematch':
+            z_xu_aug = torch.cat(z_xu_aug, 0)
+            loss_saf, _ = self_adaptative_fairness(mask_xu, z_xu_aug, self.pl_mask.p_model, self.pl_mask.label_hist)
+
         loss_summary = {}
 
         loss_all = 0
@@ -222,12 +244,18 @@ class FBCSA(TrainerXU):
         loss_all += loss_u_sim
         loss_summary["loss_SA"] = loss_u_sim.item()
 
+        if self.baseline == 'freematch':
+            loss_all += self.weight_f * loss_saf
+            loss_summary["loss_sat"] = self.weight_f * loss_saf.item()
+
         self.model_backward_and_update(loss_all)
 
         loss_summary["y_u_pred_acc_thre"] = y_u_pred_stats["acc_thre"]
         loss_summary["y_u_pred_acc_raw"] = y_u_pred_stats["acc_raw"]
         loss_summary["y_u_pred_keep_rate"] = y_u_pred_stats["keep_rate"]
 
+        if self.baseline in ['flexmatch', 'freematch']:
+            loss_summary["mean_threshold"] = self.pl_mask.classwise_threshold.mean()
 
         if (self.batch_idx + 1) == self.num_batches:
             self.update_lr()
@@ -298,6 +326,12 @@ class FBCSA(TrainerXU):
         u_aug = u_aug.to(self.device)
         y_u_true = y_u_true.to(self.device)
 
+        index_x = batch_x["index"]
+        index_u = batch_u["index"] + self.len_x
+
+        index_x = index_x.to(self.device)
+        index_u = index_u.to(self.device)
+
         # Split data into K chunks
         K = self.num_source_domains
         # NOTE: If num_source_domains=1, we split a batch into two halves
@@ -309,6 +343,8 @@ class FBCSA(TrainerXU):
         u0 = u0.chunk(K)
         u = u.chunk(K)
         u_aug = u_aug.chunk(K)
+        index_x = index_x.chunk(K)
+        index_u = index_u.chunk(K)
 
         batch = {
             # x
@@ -321,6 +357,9 @@ class FBCSA(TrainerXU):
             "u": u,
             "u_aug": u_aug,
             "y_u_true": y_u_true,  # kept intact
+            # index
+            "index_x": index_x,
+            "index_u": index_u,
         }
 
         return batch
