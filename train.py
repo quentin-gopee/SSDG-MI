@@ -14,6 +14,7 @@ import datasets.ssdg_pacs
 import datasets.ssdg_officehome
 import datasets.ssdg_digits_dg
 import datasets.ssdg_vlcs
+import datasets.ssdg_terraincognita
 
 # trainers
 import trainers.ME
