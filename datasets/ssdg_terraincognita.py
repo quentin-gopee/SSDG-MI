@@ -39,6 +39,10 @@ class SSDGTerraIncognita(DatasetBase):
         src_domains = cfg.DATASET.SOURCE_DOMAINS
         tgt_domain = cfg.DATASET.TARGET_DOMAINS[0]
 
+        print(cfg.DATASET.SOURCE_DOMAINS)
+        print(cfg.DATASET.TARGET_DOMAINS)
+        print(cfg.DATASET.ONE_SOURCE_L)
+
         split_ssdg_path = osp.join(
             self.split_ssdg_dir, f"{tgt_domain}_nlab{num_labeled}_{cfg.DATASET.IMBALANCE}_seed{seed}.json"
         )
@@ -128,8 +132,6 @@ class SSDGTerraIncognita(DatasetBase):
                     random.shuffle(impaths)
 
                     for i, impath in enumerate(impaths):
-                        if i >= num_labeled_per_cd[domain][label]:
-                            break
                         item = Datum(impath=impath, label=label, domain=domain)
                         if (i + 1) <= num_labeled_per_cd[domain][label]:
                             items_x.append(item)
