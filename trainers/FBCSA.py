@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from dassl.data import DataManager
+from dassl.data.data_manager import DataManager, build_data_loader
 from dassl.engine import TRAINER_REGISTRY, TrainerXU, SimpleNet
 from dassl.optim import build_optimizer, build_lr_scheduler
 from dassl.data.transforms import build_transform
@@ -76,6 +76,17 @@ class FBCSA(TrainerXU):
         self.num_classes = self.dm.num_classes
         self.num_source_domains = self.dm.num_source_domains
         self.lab2cname = self.dm.lab2cname
+
+        # Prototype loader that iterates through all the data
+        tfm_test = build_transform(cfg, is_train=False)
+        self.proto_loader = build_data_loader(
+            cfg,
+            sampler_type='SequentialSampler',
+            data_source=self.dm.dataset.train_x,
+            batch_size=cfg.DATALOADER.TRAIN_X.BATCH_SIZE,
+            tfm=tfm_test,
+            is_train=False
+        )
 
     def build_model(self):
         cfg = self.cfg
@@ -264,11 +275,12 @@ class FBCSA(TrainerXU):
         return loss_summary
 
     def before_epoch(self):
-        train_loader_x_iter = iter(self.train_loader_x)
+        # train_loader_x_iter = iter(self.train_loader_x)
+        train_loader_x_iter = iter(self.proto_loader)
         total_x = []
         total_y = []
         total_d = []
-        for self.batch_idx in range(len(self.train_loader_x)):
+        for self.batch_idx in range(len(self.proto_loader)):
             batch_x = next(train_loader_x_iter)
 
             input_x = batch_x["img0"]
