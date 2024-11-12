@@ -271,7 +271,7 @@ class ME(TrainerXU):
             y_pred.extend(pred.cpu().numpy().tolist())
 
         # Predictions on train_x and train_u
-        print(y_pred)
+        # print(y_pred)
 
         # histogram of y_pred
         hist, _ = np.histogram(y_pred, bins=self.num_classes)
