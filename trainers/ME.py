@@ -5,6 +5,7 @@ import time
 import datetime
 import numpy as np
 from math import ceil
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -237,3 +238,42 @@ class ME(TrainerXU):
         # Close writer
         self.close_writer()
 
+    @torch.no_grad()
+    def test_train(self):
+        """A generic testing pipeline."""
+        y_pred = []
+
+        self.set_model_mode("eval")
+        self.evaluator.reset()
+
+        print(f"Evaluate on the *train_x* set")
+        iter_train_x = iter(self.train_loader_x)
+        n_batches_x = len(self.train_loader_x)
+        print(f"n_batches_x: {n_batches_x}")
+        for i in tqdm(range(n_batches_x)):
+            batch = next(iter_train_x)
+            input, label = self.parse_batch_test(batch)
+            output = self.model_inference(input)
+            pred = output.max(1)[1]
+            y_pred.extend(pred.cpu().numpy().tolist())
+            self.evaluator.process(output, label)
+        
+        self.evaluator.evaluate()
+
+        print(f"Evaluate on the *train_u* set")
+        iter_train_u = iter(self.train_loader_u)
+        n_batches_u = len(self.train_loader_u)
+        for i in tqdm(range(n_batches_u)):
+            batch = next(iter_train_u)
+            input, label = self.parse_batch_test(batch)
+            output = self.model_inference(input)
+            pred = output.max(1)[1]
+            y_pred.extend(pred.cpu().numpy().tolist())
+
+        # Predictions on train_x and train_u
+        print(y_pred)
+
+        # histogram of y_pred
+        hist, _ = np.histogram(y_pred, bins=self.num_classes)
+        print("Histogram of y_pred:")
+        print(hist)
