@@ -260,20 +260,20 @@ class ME(TrainerXU):
         
         self.evaluator.evaluate()
 
-        print(f"Evaluate on the *train_u* set")
-        iter_train_u = iter(self.train_loader_u)
-        n_batches_u = len(self.train_loader_u)
-        for i in tqdm(range(n_batches_u)):
-            batch = next(iter_train_u)
-            input, label = self.parse_batch_test(batch)
-            output = self.model_inference(input)
-            pred = output.max(1)[1]
-            y_pred.extend(pred.cpu().numpy().tolist())
+        # print(f"Evaluate on the *train_u* set")
+        # iter_train_u = iter(self.train_loader_u)
+        # n_batches_u = len(self.train_loader_u)
+        # for i in tqdm(range(n_batches_u)):
+        #     batch = next(iter_train_u)
+        #     input, label = self.parse_batch_test(batch)
+        #     output = self.model_inference(input)
+        #     pred = output.max(1)[1]
+        #     y_pred.extend(pred.cpu().numpy().tolist())
 
-        # Predictions on train_x and train_u
-        # print(y_pred)
+        # # Predictions on train_x and train_u
+        # # print(y_pred)
 
-        # histogram of y_pred
-        hist, _ = np.histogram(y_pred, bins=self.num_classes)
-        print("Histogram of y_pred:")
-        print(hist)
+        # # histogram of y_pred
+        # hist, _ = np.histogram(y_pred, bins=self.num_classes)
+        # print("Histogram of y_pred:")
+        # print(hist)
